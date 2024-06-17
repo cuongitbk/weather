@@ -1,0 +1,81 @@
+image: docker:latest
+variables:
+  GIT_BRANCH: ${CI_COMMIT_REF_NAME}
+  IMAGE_TAG: "dev"
+  IMAGE_VERSION_TAG: ${CI_COMMIT_SHORT_SHA}
+stages:
+  - build
+  - deploy-migrate
+  - deploy-servers
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+      variables:
+        IMAGE_TAG: "dev"
+    - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "master"
+      variables:
+        IMAGE_TAG: "latest"
+        IMAGE_VERSION_TAG: "master-$CI_COMMIT_SHORT_SHA"
+    - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_TAG
+      variables:
+        IMAGE_TAG: "latest"
+        IMAGE_VERSION_TAG: ${CI_COMMIT_TAG}
+
+build_image:
+  stage: build
+  script:
+#    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker pull $CI_REGISTRY_IMAGE:$IMAGE_TAG || true
+    - docker build --tag $CI_REGISTRY_IMAGE:$IMAGE_VERSION_TAG --tag $CI_REGISTRY_IMAGE:$IMAGE_TAG -f Dockerfile .
+    - docker push $CI_REGISTRY_IMAGE:$IMAGE_VERSION_TAG
+    - docker push $CI_REGISTRY_IMAGE:$IMAGE_TAG
+
+deploy_dev:
+  stage: deploy-migrate
+  variables:
+    SERVER_ADDRESS: ${DEV_SERVER}
+    USER_REMOTE: ${DEV_REMOTE_USER}
+    USER_ACCESS_KEY: ${DEV_REMOTE_ACCESS_KEY}
+    WORKING_DIRECTORY: ${DEVELOP_WORKING_DIRECTORY}
+  before_script:
+    - apk add openssh-client
+    - apk add --update coreutils
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo "$USER_ACCESS_KEY" | base64 -d | tr -d '\r' | ssh-add -
+    - chmod 700 ~/.ssh
+  script:
+    - echo "Start build dev version ....."
+    - ssh -o StrictHostKeyChecking=no $USER_REMOTE@$SERVER_ADDRESS "cd ${WORKING_DIRECTORY}; ./start.sh"
+  only:
+    - dev
+  needs:
+    - build_image
+
+deploy_product:
+  stage: deploy-servers
+  variables:
+    SERVER_ADDRESS: ${PROD_SERVER}
+    USER_REMOTE: ${PROD_REMOTE_USER}
+    USER_ACCESS_KEY: ${PROD_REMOTE_ACCESS_KEY}
+    WORKING_DIRECTORY: ${PROD_WORKING_DIRECTORY}
+  before_script:
+    - apk add openssh-client
+    - apk add --update coreutils
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo "$USER_ACCESS_KEY" | base64 -d | tr -d '\r' | ssh-add -
+    - chmod 700 ~/.ssh
+  script:
+    - echo "Disconnect health check API"
+    - ssh -o StrictHostKeyChecking=no $USER_REMOTE@$SERVER_ADDRESS "cd ${WORKING_DIRECTORY}; rm ${HEALTH_FILE_CONFIG};sleep 60"
+    - echo "Start build backend-01 server ....."
+    - ssh -o StrictHostKeyChecking=no $USER_REMOTE@$SERVER_ADDRESS "cd ${WORKING_DIRECTORY}; ./start.sh"
+    - echo "Resume health check API"
+    - ssh -o StrictHostKeyChecking=no $USER_REMOTE@$SERVER_ADDRESS "cd ${WORKING_DIRECTORY}; sleep 30; echo 'OK' > ${HEALTH_FILE_CONFIG}"
+  only:
+    - master
+    - tags
+  needs:
+    - build_image

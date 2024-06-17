@@ -1,0 +1,13 @@
+Django==4.1
+requests==2.31.0
+celery==5.4.0
+redis==5.0.4
+django-celery-beat==2.6.0
+django-cors-headers==4.3.1
+mysqlclient==2.1.0
+django-environ==0.11.2
+json_log_formatter==1.0
+gunicorn==22.0.0
+psycopg==3.1.18
+psycopg2-binary==2.9.9
+CMRESHandler==1.0.0

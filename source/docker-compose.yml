@@ -1,0 +1,73 @@
+services:
+  weather.redis:
+    image: 'bitnami/redis:latest'
+    restart: always
+    expose:
+      - '6379'
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+
+  weather.mysql:
+    platform: linux/X86_64
+    image: mysql:8.3.0
+    restart: always
+    environment:
+      MYSQL_DATABASE: 'weather_db'
+      MYSQL_USER: 'weather'
+      MYSQL_PASSWORD: '7337cd62696005e5d90f7fdb16bc2f0e'
+      MYSQL_ROOT_PASSWORD: 'f950062fdd163e7eb302679b6d7fcc05'
+    expose:
+      - '3306'
+    volumes:
+      - ./database/data:/var/lib/mysql
+      - ./database/mysqld.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+
+  weather.web:
+    build: source
+    image: weather/django:1.0
+    command: bash -c "python manage.py migrate && python manage.py extract_location_info --lat=41.7352 --long=-111.8349 && gunicorn weather.wsgi -b 0.0.0.0:8000 --worker-class=gthread -w 3 --threads=3 -t 300 --max-requests=5000 --max-requests-jitter=200 --log-level=info"
+    volumes:
+      - ./logs:/src/logs
+      - ./configurations/django.env:/src/.env
+    expose:
+      - "8000"
+    depends_on:
+      - weather.mysql
+      - weather.redis
+    restart: always
+
+  weather.celery.beat:
+    image: weather/django:1.0
+    command: bash -c "sleep 10s && celery --app=weather.celery beat -l info"
+    volumes:
+      - ./logs:/src/logs
+      - ./configurations/django.env:/src/.env
+    restart: always
+    depends_on:
+      - weather.mysql
+      - weather.redis
+
+  weather.celery.worker:
+    image: weather/django:1.0
+    command: bash -c "sleep 10s && celery --app=weather.celery worker -l info -c 3 -Q cron_jobs"
+    volumes:
+      - ./logs:/src/logs
+      - ./configurations/django.env:/src/.env
+    restart: always
+    depends_on:
+      - weather.mysql
+      - weather.redis
+
+  weather.gateway:
+    build: ./nginx
+    image: weather/nginx_gateway:1.0
+    container_name: weather_nginx_gateway
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/web_nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./logs:/var/log/nginx
+      - ./source/staticfiles:/staticfiles
+    command: bash -c "dockerize -wait tcp://weather.web:8000 -timeout 100s && nginx -g 'daemon off;'"

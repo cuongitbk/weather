@@ -1,0 +1,86 @@
+{% extends "web/base.html" %}
+{% load static %}
+{% block css %}
+    <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}">
+    <link rel="stylesheet" href='{% static "css/index.css" %}'>
+{% endblock %}
+{% block js %}
+    <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+    <script src="{% static 'js/jquery-2.2.4.min.js' %}"></script>
+    <script type="text/javascript" src="{% static 'js/index.js' %}"></script>
+{% endblock %}
+{% block title %}National Weather Service Forcast{% endblock %}
+
+{% block content %}
+    <div class="header">
+    <div class="name">National Weather Service Forcast for <span class="highlight-text">{{ location.city }}</span></div>
+    <div class="issued_by">Issued by: National Weather Service {{ location.office.name }}</div>
+    <div class="updated_time">Updated: <span class="highlight-text">{{ location.updated }}</span> </div>
+    <div class="forcast_selection">
+        <select class="form-select select_location" aria-label="Select Forcast">
+            <option selected>- Select Forcast -</option>
+            {% for item in locations %}
+                <option value="{{ item.id }}">{{ item.city }}, {{ item.state }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+<div class="content-wrapper">
+    <div class="location-title">{{ location.city }}</div>
+    <div class="periods">
+        <div class="row-container">
+        {% for period in periods %}
+            {% if period.is_daytime %}
+            <div class="period_item">
+                <div class="image_wrapper">
+                    <div class="name">{{ period.name }}</div>
+                    <img alt="" src="{{ period.icon }}">
+                    <div>{{ period.short_forecast }}</div>
+                </div>
+                <div class="temperature">
+                    {% if period.is_daytime %}Hi{% else %}Lo{% endif %}
+                    <span class="{% if period.is_daytime %}red-text{% else %}blue-text{% endif %}">
+                    {{ period.temperature }}
+                    &deg;{{ period.temperature_unit }}
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+        {% endfor %}
+        </div>
+        <div class="row-container">
+        {% for period in periods %}
+            {% if not period.is_daytime %}
+            <div class="period_item">
+                <div class="image_wrapper">
+                    <div class="name">{{ period.name }}</div>
+                    <img alt="" src="{{ period.icon }}">
+                    <div>{{ period.short_forecast }}</div>
+                </div>
+                <div class="temperature">
+                    {% if period.is_daytime %}Hi{% else %}Lo{% endif %}
+                    <span class="{% if period.is_daytime %}red-text{% else %}blue-text{% endif %}">
+                    {{ period.temperature }}
+                    &deg;{{ period.temperature_unit }}
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+        {% endfor %}
+        </div>
+    </div>
+    <div class="detailed_forecasts">
+        {% for period in periods %}
+        <div class="detailed_forecast_item {% if period.is_daytime and forloop.counter0 > 0 %}next_day{% endif %}">
+            <div class="name">{{ period.name }}</div>
+            <div class="content">{{ period.detailed_forecast }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+<div class="footer-wrapper">
+    <div class="footer">
+    Forecast from <a href="https://www.weather.gov/">NOAA - NWS</a> for {{ location.city }}, {{ location.state }}
+    </div>
+</div>
+{% endblock %}

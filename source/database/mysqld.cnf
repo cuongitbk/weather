@@ -1,0 +1,6 @@
+[mysqld]
+character-set-server = utf8mb4
+tls_version=TLSv1.2
+
+[client]
+default-character-set = utf8mb4
